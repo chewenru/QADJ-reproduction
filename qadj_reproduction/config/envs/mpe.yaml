@@ -1,0 +1,25 @@
+env: mpe
+
+env_args:
+  scenario_name: "predator_prey"
+  seed: null
+  max_cycles: 25
+  predator_agents: 3
+  predator_prey: 1
+  predator_obstacles: 2
+  navigation_agents: 3
+  navigation_landmarks: 3
+  keep_away_agents: 2
+  keep_away_landmarks: 2
+  keep_away_opponents: 1
+  continuous_actions: False
+  render_mode: null
+
+runner: episode
+test_greedy: True
+test_nepisode: 100
+test_interval: 10000
+log_interval: 10000
+runner_log_interval: 10000
+learner_log_interval: 10000
+t_max: 2050000

@@ -1,0 +1,28 @@
+# --- QADJ-VDN ---
+
+action_selector: "epsilon_greedy"
+epsilon_start: 1.0
+epsilon_finish: 0.05
+epsilon_anneal_time: 50000
+
+runner: "episode"
+buffer_size: 5000
+target_update_interval: 200
+
+agent_output_type: "q"
+learner: "qadj_learner"
+double_q: True
+mixer: "vdn"
+
+qadj_beta_init: 0.2
+qadj_beta_step: 0.02
+qadj_t1: 20
+qadj_t2: 400
+qadj_rho: 0.3
+qadj_eta: 1.0
+qadj_aux_loss_weight: 0.1
+qadj_enable_upper_bound: True
+qadj_enable_lower_bound: True
+qadj_control_bounds: True
+
+name: "qadj_vdn"

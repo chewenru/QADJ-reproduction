@@ -1,0 +1,52 @@
+# --- MPE QADJ-QPLEX late-light variant ---
+
+action_selector: "epsilon_greedy"
+epsilon_start: 1.0
+epsilon_finish: 0.05
+epsilon_anneal_time: 50000
+
+runner: "episode"
+buffer_size: 5000
+target_update_interval: 200
+
+agent_output_type: "q"
+learner: "qadj_dmaq_learner"
+double_q: True
+mixer: "dmaq"
+mixing_embed_dim: 32
+hypernet_embed: 64
+adv_hypernet_layers: 2
+adv_hypernet_embed: 64
+num_kernel: 4
+is_minus_one: True
+weighted_head: True
+is_adv_attention: True
+is_stop_gradient: True
+
+# Keep both bounds, but let QPLEX learn its MPE policy first. The QADJ
+# signal is a late, light regulariser instead of a full-strength target clamp.
+qadj_beta_upper: 0.03
+qadj_beta_lower: 0.03
+qadj_beta_step: 0.002
+qadj_beta_upper_min: 0.02
+qadj_beta_lower_min: 0.02
+qadj_beta_upper_max: 0.08
+qadj_beta_lower_max: 0.08
+qadj_t1: 20
+qadj_t2: 400
+qadj_rho: 0.3
+qadj_eta: 1.0
+qadj_aux_loss_weight: 0.02
+qadj_constraint_weight: 0.01
+qadj_margin_cap: 10.0
+qadj_target_cap: 100.0
+qadj_correction_cap_ratio: 0.10
+qadj_warmup_steps: 0
+qadj_main_start_steps: 1000000
+qadj_main_ramp_steps: 300000
+qadj_main_max_weight: 0.35
+qadj_enable_upper_bound: True
+qadj_enable_lower_bound: True
+qadj_control_bounds: True
+
+name: "qadj_qplex_mpe_late_light"

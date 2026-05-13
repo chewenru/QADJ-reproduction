@@ -1,0 +1,53 @@
+  # --- QADJ-QTRAN paper-principle preserving SMAC adaptation ---
+
+action_selector: "epsilon_greedy"
+epsilon_start: 1.0
+epsilon_finish: 0.05
+epsilon_anneal_time: 50000
+
+runner: "episode"
+buffer_size: 5000
+target_update_interval: 200
+
+agent_output_type: "q"
+learner: "qadj_qtran_paper_smac_adapted_learner"
+double_q: True
+mixer: "qtran_base"
+mixing_embed_dim: 64
+qtran_arch: "qtran_paper"
+
+opt_loss: 1
+nopt_min_loss: 0.1
+network_size: small
+
+qadj_beta_init: 0.03
+qadj_beta_upper_init: 0.025
+qadj_beta_lower_init: 0.03
+qadj_beta_step: 0.003
+qadj_beta_upper_step: 0.0008
+qadj_beta_lower_step: 0.001
+qadj_beta_dominance_ratio: 1.2
+qadj_beta_min_trigger_frac: 0.1
+qadj_beta_min: 0.01
+qadj_beta_upper_min: 0.015
+qadj_beta_lower_min: 0.01
+qadj_beta_max: 0.2
+qadj_beta_upper_max: 0.06
+qadj_beta_lower_max: 0.1
+qadj_t1: 20
+qadj_t2: 200
+qadj_rho: 0.3
+qadj_eta: 1.0
+qadj_aux_loss_weight: 0.01
+qadj_upper_aux_loss_scale: 0.03
+qadj_lower_aux_loss_scale: 0.15
+qadj_bound_use_bias: True
+qadj_target_cap: 100.0
+qadj_enable_upper_bound: True
+qadj_enable_lower_bound: True
+qadj_control_bounds: True
+
+qadj_warmup_steps: 200000
+qadj_ramp_steps: 200000
+
+name: "qadj_qtran_paper_smac_adapted"

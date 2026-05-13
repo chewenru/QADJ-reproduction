@@ -1,0 +1,10 @@
+tb_logs/
+results/
+logs/
+checkpoints/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store

@@ -1,0 +1,27 @@
+# Open-source only the reproduction code directory from this workspace.
+/*
+!/.gitignore
+!/qadj_reproduction/
+!/qadj_reproduction/**
+
+# Local workspace noise that should never be published.
+/.venv/
+/.vscode/
+/.agents/
+/.codex
+/3rdparty/
+/logs/
+/results/
+/checkpoints/
+/figures/
+/tables/
+/wjh72_QPLEX/
+/打包环境/
+
+# Root-level manuscript and generated assets.
+/*.pdf
+/*.png
+/*.zip
+/*.tex
+/*.md
+/*:Zone.Identifier

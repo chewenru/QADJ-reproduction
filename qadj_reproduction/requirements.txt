@@ -1,0 +1,13 @@
+numpy>=1.26
+PyYAML>=6.0
+sacred>=0.8.5
+torch>=2.5
+tensorboard>=2.14
+matplotlib>=3.6
+pandas>=2.2
+gymnasium>=1.0
+pettingzoo[mpe]>=1.24
+pygame>=2.5
+pysc2>=4.0
+protobuf<4
+git+https://github.com/oxwhirl/smac.git@d6aab33f76abc3849c50463a8592a84f59a5ef84

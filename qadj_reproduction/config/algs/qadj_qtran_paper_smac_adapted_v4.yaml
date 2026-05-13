@@ -1,0 +1,71 @@
+  # --- QADJ-QTRAN paper-principle preserving SMAC adaptation v4 ---
+
+action_selector: "epsilon_greedy"
+epsilon_start: 1.0
+epsilon_finish: 0.05
+epsilon_anneal_time: 50000
+
+runner: "episode"
+buffer_size: 5000
+target_update_interval: 200
+
+agent_output_type: "q"
+learner: "qadj_qtran_paper_smac_adapted_v2_learner"
+double_q: True
+mixer: "qtran_base"
+mixing_embed_dim: 64
+qtran_arch: "qtran_paper"
+
+opt_loss: 1
+nopt_min_loss: 0.1
+network_size: small
+
+qadj_beta_init: 0.03
+qadj_beta_upper_init: 0.02
+qadj_beta_lower_init: 0.02
+qadj_beta_step: 0.003
+qadj_beta_upper_step: 0.0006
+qadj_beta_lower_step: 0.0006
+qadj_beta_dominance_ratio: 1.2
+qadj_beta_min_trigger_frac: 0.1
+qadj_beta_min: 0.01
+qadj_beta_upper_min: 0.015
+qadj_beta_lower_min: 0.01
+qadj_beta_max: 0.2
+qadj_beta_upper_max: 0.04
+qadj_beta_lower_max: 0.06
+qadj_t1: 20
+qadj_t2: 200
+qadj_rho: 0.22
+qadj_eta: 0.65
+qadj_upper_correction_scale: 0.95
+qadj_lower_correction_scale: 0.75
+qadj_aux_loss_weight: 0.01
+qadj_upper_aux_loss_scale: 0.03
+qadj_lower_aux_loss_scale: 0.10
+qadj_bound_use_bias: True
+qadj_target_cap: 100.0
+qadj_enable_upper_bound: True
+qadj_enable_lower_bound: True
+qadj_control_bounds: True
+
+qadj_bound_gap_gate_scale: 10.0
+qadj_gap_conf_threshold: 0.25
+qadj_skip_aux_when_no_conf: True
+qadj_beta_adjust_min_valid_frac: 0.25
+qadj_qtran_pressure_ema_tau: 0.95
+qadj_qtran_pressure_scale: 0.8
+qadj_decay_start_frac: 0.75
+qadj_decay_end_frac: 0.98
+qadj_min_apply_ratio: 0.55
+qadj_freeze_beta_decay_frac: 0.55
+qadj_correction_cap_ratio: 0.25
+qadj_upper_imbalance_min_gate: 0.2
+qadj_lower_imbalance_min_gate: 0.05
+qadj_bias_abs_max: 6.0
+qadj_within_margin: 0.0
+
+qadj_warmup_steps: 100000
+qadj_ramp_steps: 200000
+
+name: "qadj_qtran_paper_smac_adapted_v4"

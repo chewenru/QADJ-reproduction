@@ -1,0 +1,50 @@
+# --- MPE QADJ-QPLEX defaults ---
+
+action_selector: "epsilon_greedy"
+epsilon_start: 1.0
+epsilon_finish: 0.05
+epsilon_anneal_time: 50000
+
+runner: "episode"
+buffer_size: 5000
+target_update_interval: 200
+
+agent_output_type: "q"
+learner: "qadj_dmaq_learner"
+double_q: True
+mixer: "dmaq_qatten"
+mixing_embed_dim: 32
+hypernet_embed: 64
+adv_hypernet_layers: 1
+adv_hypernet_embed: 64
+unit_dim: 16
+num_kernel: 4
+is_minus_one: True
+is_adv_attention: True
+is_stop_gradient: True
+n_head: 4
+attend_reg_coef: 0.001
+state_bias: True
+mask_dead: False
+weighted_head: False
+nonlinear: False
+
+qadj_beta_init: 0.02
+qadj_beta_step: 0.002
+qadj_beta_min: 0.01
+qadj_beta_max: 0.1
+qadj_t1: 20
+qadj_t2: 400
+qadj_rho: 0.3
+qadj_eta: 1.0
+qadj_aux_loss_weight: 0.02
+qadj_constraint_weight: 0.005
+qadj_margin_cap: 10.0
+qadj_target_cap: 100.0
+qadj_correction_cap_ratio: 0.5
+qadj_warmup_steps: 0
+qadj_enable_upper_bound: True
+qadj_enable_lower_bound: True
+qadj_control_bounds: True
+
+name: "qadj_qplex"
