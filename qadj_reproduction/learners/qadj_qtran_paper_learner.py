@@ -36,8 +36,24 @@ class QADJQTranPaperLearner:
         self.beta_lower_min = getattr(args, "qadj_beta_lower_min", self.beta_min)
         self.beta_upper_max = getattr(args, "qadj_beta_upper_max", getattr(args, "qadj_beta_max", 0.95))
         self.beta_lower_max = getattr(args, "qadj_beta_lower_max", getattr(args, "qadj_beta_max", 0.95))
-        self.adjust_interval = getattr(args, "qadj_t1", 20)
-        self.sync_interval = getattr(args, "qadj_t2", 400)
+        self.adjust_interval = int(getattr(args, "qadj_t1", 20))
+        self.sync_interval = int(getattr(args, "qadj_t2", 400))
+        self.base_adjust_interval = max(1, self.adjust_interval)
+        self.base_sync_interval = max(1, self.sync_interval)
+        self.adaptive_schedule = bool(getattr(args, "qadj_adaptive_schedule", False))
+        self.adaptive_adjust_min = max(1, int(getattr(args, "qadj_adaptive_t1_min", max(1, self.base_adjust_interval // 2))))
+        self.adaptive_adjust_max = max(
+            self.adaptive_adjust_min,
+            int(getattr(args, "qadj_adaptive_t1_max", self.base_adjust_interval * 4)),
+        )
+        self.adaptive_sync_min = max(1, int(getattr(args, "qadj_adaptive_t2_min", max(1, self.base_sync_interval // 2))))
+        self.adaptive_sync_max = max(
+            self.adaptive_sync_min,
+            int(getattr(args, "qadj_adaptive_t2_max", self.base_sync_interval * 4)),
+        )
+        self.adaptive_beta_gain = float(getattr(args, "qadj_adaptive_beta_gain", 1.0))
+        self.adaptive_pressure_target = float(getattr(args, "qadj_adaptive_pressure_target", 1.0))
+        self.adaptive_conf_target = float(getattr(args, "qadj_adaptive_conf_target", 0.6))
         self.rho = getattr(args, "qadj_rho", 0.3)
         self.eta = getattr(args, "qadj_eta", 1.0)
         self.upper_imbalance_min_gate = float(getattr(args, "qadj_upper_imbalance_min_gate", 0.3))
@@ -141,6 +157,36 @@ class QADJQTranPaperLearner:
             params=self.aux_params, lr=args.lr, alpha=args.optim_alpha, eps=args.optim_eps
         )
 
+    def _clamp_interval(self, value, low, high):
+        return int(max(low, min(high, round(value))))
+
+    def _update_adaptive_intervals(self, over_frac, under_frac, within_frac, valid_frac):
+        if not self.adaptive_schedule:
+            return
+
+        violation_frac = over_frac + under_frac
+        low_conf = max(0.0, self.adaptive_conf_target - valid_frac)
+        high_pressure = max(0.0, self.qtran_pressure_ema - self.adaptive_pressure_target)
+
+        # More violations or unstable QTRAN constraints need faster beta feedback
+        # and fresher auxiliary bounds. Stable within-bound regimes can afford
+        # slower updates, which reduces auxiliary over-intervention late in training.
+        urgency = min(1.0, violation_frac + low_conf + 0.1 * high_pressure)
+        stable = max(0.0, within_frac - violation_frac)
+        adjust_scale = 1.0 - 0.5 * urgency + 0.5 * stable
+        sync_scale = 1.0 - 0.6 * urgency + 0.6 * stable
+
+        self.adjust_interval = self._clamp_interval(
+            self.base_adjust_interval * adjust_scale,
+            self.adaptive_adjust_min,
+            self.adaptive_adjust_max,
+        )
+        self.sync_interval = self._clamp_interval(
+            self.base_sync_interval * sync_scale,
+            self.adaptive_sync_min,
+            self.adaptive_sync_max,
+        )
+
     def _reset_module_parameters(self, module):
         def _maybe_reset(submodule):
             if hasattr(submodule, "reset_parameters"):
@@ -197,10 +243,20 @@ class QADJQTranPaperLearner:
             return
 
         dominance_threshold = self.beta_dominance_ratio
+        self._update_adaptive_intervals(over_frac, under_frac, within_frac, valid_frac)
+
+        upper_step = self.beta_upper_step
+        lower_step = self.beta_lower_step
+        if self.adaptive_schedule:
+            pressure_boost = 1.0 + 0.1 * max(0.0, self.qtran_pressure_ema - self.adaptive_pressure_target)
+            upper_imbalance = max(0.0, over_frac - max(under_frac, within_frac))
+            lower_imbalance = max(0.0, under_frac - max(over_frac, within_frac))
+            upper_step = self.beta_upper_step * self.adaptive_beta_gain * (1.0 + upper_imbalance) * pressure_boost
+            lower_step = self.beta_lower_step * self.adaptive_beta_gain * (1.0 + lower_imbalance) * pressure_boost
 
         # Paper-style control: only adjust when one regime is clearly dominant.
         if over_frac >= self.beta_min_trigger_frac and over > dominance_threshold * max(under, within):
-            self.beta_upper = min(self.beta_upper_max, self.beta_upper + self.beta_upper_step)
+            self.beta_upper = min(self.beta_upper_max, self.beta_upper + upper_step)
         elif (
             self.current_train_frac < self.freeze_beta_decay_frac
             and
@@ -208,10 +264,10 @@ class QADJQTranPaperLearner:
             and within_frac >= self.beta_min_trigger_frac
             and within > dominance_threshold * max(over, under)
         ):
-            self.beta_upper = max(self.beta_upper_min, self.beta_upper - self.beta_upper_step)
+            self.beta_upper = max(self.beta_upper_min, self.beta_upper - upper_step)
 
         if under_frac >= self.beta_min_trigger_frac and under > dominance_threshold * max(over, within):
-            self.beta_lower = min(self.beta_lower_max, self.beta_lower + self.beta_lower_step)
+            self.beta_lower = min(self.beta_lower_max, self.beta_lower + lower_step)
         elif (
             self.current_train_frac < self.freeze_beta_decay_frac
             and
@@ -219,7 +275,7 @@ class QADJQTranPaperLearner:
             and within_frac >= self.beta_min_trigger_frac
             and within > dominance_threshold * max(over, under)
         ):
-            self.beta_lower = max(self.beta_lower_min, self.beta_lower - self.beta_lower_step)
+            self.beta_lower = max(self.beta_lower_min, self.beta_lower - lower_step)
 
         self.bound_stats = {"over": 0, "under": 0, "within": 0, "valid": 0.0, "total": 0.0}
 
@@ -637,6 +693,9 @@ class QADJQTranPaperLearner:
             )
             self.logger.log_stat("qadj_beta_upper", self.beta_upper, t_env)
             self.logger.log_stat("qadj_beta_lower", self.beta_lower, t_env)
+            self.logger.log_stat("qadj_adjust_interval", self.adjust_interval, t_env)
+            self.logger.log_stat("qadj_sync_interval", self.sync_interval, t_env)
+            self.logger.log_stat("qadj_adaptive_schedule", float(self.adaptive_schedule), t_env)
             self.logger.log_stat("qadj_lower_correction_scale", current_lower_correction_scale, t_env)
             self.logger.log_stat("qadj_lower_aux_loss_scale", current_lower_aux_loss_scale, t_env)
             self.logger.log_stat("qadj_qtran_pressure_scale", current_qtran_pressure_scale, t_env)
@@ -677,6 +736,8 @@ class QADJQTranPaperLearner:
                 "beta_lower": self.beta_lower,
                 "train_step": self.train_step,
                 "sync_age": self.sync_age,
+                "adjust_interval": self.adjust_interval,
+                "sync_interval": self.sync_interval,
                 "qtran_pressure_ema": self.qtran_pressure_ema,
             },
             f"{path}/qadj_state.th",
@@ -713,6 +774,8 @@ class QADJQTranPaperLearner:
         self.beta_lower = state["beta_lower"]
         self.train_step = state["train_step"]
         self.sync_age = state["sync_age"]
+        self.adjust_interval = int(state.get("adjust_interval", self.adjust_interval))
+        self.sync_interval = int(state.get("sync_interval", self.sync_interval))
         self.qtran_pressure_ema = state.get("qtran_pressure_ema", self.qtran_pressure_ema)
         opt_state = th.load(f"{path}/opt.th", map_location=lambda storage, loc: storage)
         if isinstance(opt_state, dict) and "main" in opt_state and "aux" in opt_state:

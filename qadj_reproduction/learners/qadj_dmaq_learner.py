@@ -30,8 +30,22 @@ class QADJDMAQLearner:
         self.beta_lower_min = getattr(args, "qadj_beta_lower_min", self.beta_min)
         self.beta_upper_max = getattr(args, "qadj_beta_upper_max", self.beta_max)
         self.beta_lower_max = getattr(args, "qadj_beta_lower_max", self.beta_max)
-        self.adjust_interval = getattr(args, "qadj_t1", 20)
-        self.sync_interval = getattr(args, "qadj_t2", 400)
+        self.adjust_interval = int(getattr(args, "qadj_t1", 20))
+        self.sync_interval = int(getattr(args, "qadj_t2", 400))
+        self.base_adjust_interval = max(1, self.adjust_interval)
+        self.base_sync_interval = max(1, self.sync_interval)
+        self.adaptive_schedule = bool(getattr(args, "qadj_adaptive_schedule", False))
+        self.adaptive_adjust_min = max(1, int(getattr(args, "qadj_adaptive_t1_min", max(1, self.base_adjust_interval // 2))))
+        self.adaptive_adjust_max = max(
+            self.adaptive_adjust_min,
+            int(getattr(args, "qadj_adaptive_t1_max", self.base_adjust_interval * 4)),
+        )
+        self.adaptive_sync_min = max(1, int(getattr(args, "qadj_adaptive_t2_min", max(1, self.base_sync_interval // 2))))
+        self.adaptive_sync_max = max(
+            self.adaptive_sync_min,
+            int(getattr(args, "qadj_adaptive_t2_max", self.base_sync_interval * 4)),
+        )
+        self.adaptive_beta_gain = float(getattr(args, "qadj_adaptive_beta_gain", 1.0))
         self.rho = getattr(args, "qadj_rho", 0.3)
         self.eta = getattr(args, "qadj_eta", 1.0)
         self.aux_loss_weight = getattr(args, "qadj_aux_loss_weight", 0.02)
@@ -83,6 +97,9 @@ class QADJDMAQLearner:
 
         self._sync_auxiliaries()
 
+    def _clamp_interval(self, value, low, high):
+        return int(max(low, min(high, round(value))))
+
     def _set_train_mode(self, mac):
         if hasattr(mac, "set_train_mode"):
             mac.set_train_mode()
@@ -123,16 +140,38 @@ class QADJDMAQLearner:
         over = self.bound_stats["over"]
         under = self.bound_stats["under"]
         within = self.bound_stats["within"]
+        total = max(1.0, over + under + within)
+        over_frac = over / total
+        under_frac = under / total
+        within_frac = within / total
+        upper_step = self.beta_upper_step
+        lower_step = self.beta_lower_step
+        if self.adaptive_schedule:
+            violation_frac = over_frac + under_frac
+            stable = max(0.0, within_frac - violation_frac)
+            urgency = min(1.0, violation_frac)
+            self.adjust_interval = self._clamp_interval(
+                self.base_adjust_interval * (1.0 - 0.5 * urgency + 0.5 * stable),
+                self.adaptive_adjust_min,
+                self.adaptive_adjust_max,
+            )
+            self.sync_interval = self._clamp_interval(
+                self.base_sync_interval * (1.0 - 0.6 * urgency + 0.6 * stable),
+                self.adaptive_sync_min,
+                self.adaptive_sync_max,
+            )
+            upper_step = self.beta_upper_step * self.adaptive_beta_gain * (1.0 + over_frac)
+            lower_step = self.beta_lower_step * self.adaptive_beta_gain * (1.0 + under_frac)
 
         if over > within:
-            self.beta_upper = min(self.beta_upper_max, self.beta_upper + self.beta_upper_step)
+            self.beta_upper = min(self.beta_upper_max, self.beta_upper + upper_step)
         elif over > 0:
-            self.beta_upper = max(self.beta_upper_min, self.beta_upper - self.beta_upper_step)
+            self.beta_upper = max(self.beta_upper_min, self.beta_upper - upper_step)
 
         if under > within:
-            self.beta_lower = min(self.beta_lower_max, self.beta_lower + self.beta_lower_step)
+            self.beta_lower = min(self.beta_lower_max, self.beta_lower + lower_step)
         elif under > 0:
-            self.beta_lower = max(self.beta_lower_min, self.beta_lower - self.beta_lower_step)
+            self.beta_lower = max(self.beta_lower_min, self.beta_lower - lower_step)
 
         self.bound_stats = {"over": 0, "under": 0, "within": 0}
 
@@ -438,6 +477,9 @@ class QADJDMAQLearner:
             self.logger.log_stat("qadj_constraint_mean", constraint_loss.item(), t_env)
             self.logger.log_stat("qadj_beta_upper", self.beta_upper, t_env)
             self.logger.log_stat("qadj_beta_lower", self.beta_lower, t_env)
+            self.logger.log_stat("qadj_adjust_interval", self.adjust_interval, t_env)
+            self.logger.log_stat("qadj_sync_interval", self.sync_interval, t_env)
+            self.logger.log_stat("qadj_adaptive_schedule", float(self.adaptive_schedule), t_env)
             self.logger.log_stat(
                 "qadj_active", 1.0 if qadj_active else 0.0, t_env
             )
@@ -476,6 +518,8 @@ class QADJDMAQLearner:
                 "beta_lower": self.beta_lower,
                 "train_step": self.train_step,
                 "sync_age": self.sync_age,
+                "adjust_interval": self.adjust_interval,
+                "sync_interval": self.sync_interval,
             },
             f"{path}/qadj_state.th",
         )
@@ -517,6 +561,8 @@ class QADJDMAQLearner:
         self.beta_lower = state.get("beta_lower", self.beta_lower)
         self.train_step = state.get("train_step", self.train_step)
         self.sync_age = state.get("sync_age", self.sync_age)
+        self.adjust_interval = int(state.get("adjust_interval", self.adjust_interval))
+        self.sync_interval = int(state.get("sync_interval", self.sync_interval))
 
         main_opt_path = checkpoint_dir / "main_opt.th"
         if main_opt_path.exists():
